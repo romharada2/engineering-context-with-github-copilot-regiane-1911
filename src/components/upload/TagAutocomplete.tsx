@@ -13,6 +13,7 @@ export function TagAutocomplete({ availableTags, label, value, onChange }: TagAu
   const inputId = useId();
   const listboxId = useId();
   const [isOpen, setIsOpen] = useState(false);
+  const [activeOptionIndex, setActiveOptionIndex] = useState<number | null>(null);
   const tokens = value.split(",");
   const currentToken = tokens.at(-1) ?? "";
   const query = currentToken.trim().toLowerCase();
@@ -24,12 +25,16 @@ export function TagAutocomplete({ availableTags, label, value, onChange }: TagAu
       })
     : [];
   const showSuggestions = isOpen && suggestions.length > 0;
+  const activeOptionId = showSuggestions && activeOptionIndex !== null && activeOptionIndex < suggestions.length
+    ? `${listboxId}-option-${activeOptionIndex}`
+    : undefined;
 
   function selectTag(tag: string) {
     const prefix = tokens.length > 1 ? `${tokens.slice(0, -1).join(",")},` : "";
     const leadingWhitespace = currentToken.match(/^\s*/)?.[0] ?? "";
     onChange(`${prefix}${leadingWhitespace}${tag}`);
     setIsOpen(false);
+    setActiveOptionIndex(null);
   }
 
   return (
@@ -37,14 +42,45 @@ export function TagAutocomplete({ availableTags, label, value, onChange }: TagAu
       <label htmlFor={inputId}>{label}</label>
       <input
         aria-autocomplete="list"
+        aria-activedescendant={activeOptionId}
         aria-controls={showSuggestions ? listboxId : undefined}
         aria-expanded={showSuggestions}
         id={inputId}
         name="tags"
-        onBlur={() => setIsOpen(false)}
+        onBlur={() => {
+          setIsOpen(false);
+          setActiveOptionIndex(null);
+        }}
         onChange={(event) => {
           onChange(event.target.value);
           setIsOpen(true);
+          setActiveOptionIndex(null);
+        }}
+        onKeyDown={(event) => {
+          if (!showSuggestions) return;
+
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setActiveOptionIndex((current) =>
+              current === null ? 0 : Math.min(current + 1, suggestions.length - 1),
+            );
+          } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setActiveOptionIndex((current) =>
+              current === null ? suggestions.length - 1 : Math.max(current - 1, 0),
+            );
+          } else if (
+            event.key === "Enter" &&
+            activeOptionIndex !== null &&
+            activeOptionIndex < suggestions.length
+          ) {
+            event.preventDefault();
+            selectTag(suggestions[activeOptionIndex]);
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            setIsOpen(false);
+            setActiveOptionIndex(null);
+          }
         }}
         placeholder="wedding, portrait, outdoor..."
         role="combobox"
@@ -53,13 +89,14 @@ export function TagAutocomplete({ availableTags, label, value, onChange }: TagAu
       />
       {showSuggestions ? (
         <ul className="tag-suggestions" id={listboxId} role="listbox">
-          {suggestions.map((tag) => (
+          {suggestions.map((tag, index) => (
             <li
+              aria-selected={activeOptionIndex === index}
+              id={`${listboxId}-option-${index}`}
               key={tag}
               onClick={() => selectTag(tag)}
               onMouseDown={(event) => event.preventDefault()}
               role="option"
-              aria-selected={false}
             >
               {tag}
             </li>
